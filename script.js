@@ -20,7 +20,7 @@
     if (technologies && project.dataset.technologies) {
       technologies.textContent = project.dataset.technologies.split(',').map((technology) => technology.trim()).join(' · ');
     }
-    let visual = project.querySelector('.project-placeholder');
+    let visual = project.querySelector('.project__visual');
     const liveUrl = project.dataset.liveUrl?.trim();
     if (visual && liveUrl) {
       const projectLink = document.createElement('a');
@@ -43,6 +43,30 @@
       visual.prepend(image);
       visual.classList.add('has-image');
       visual.setAttribute('aria-label', `${project.dataset.project} project preview`);
+      visual.querySelector('.project-preview-fallback')?.remove();
+    }
+
+    if (visual?.classList.contains('project-site-preview')) {
+      const startPagePreview = () => {
+        if (!visual.matches(':hover') && !visual.contains(document.activeElement)) return;
+        const image = visual.querySelector('.project-image');
+        if (!image?.naturalHeight) return;
+        const travel = Math.max(0, image.getBoundingClientRect().height - visual.getBoundingClientRect().height);
+        if (travel < 1) return;
+        visual.style.setProperty('--preview-shift', `${-travel}px`);
+        visual.style.setProperty('--preview-duration', `${Math.max(9, Math.min(28, travel / 105))}s`);
+        visual.classList.add('is-scrolling');
+      };
+      const stopPagePreview = () => visual.classList.remove('is-scrolling');
+      const requestPagePreview = () => {
+        const image = visual.querySelector('.project-image');
+        if (image?.complete) startPagePreview();
+        else image?.addEventListener('load', startPagePreview, { once: true });
+      };
+      visual.addEventListener('pointerenter', requestPagePreview);
+      visual.addEventListener('pointerleave', stopPagePreview);
+      visual.addEventListener('focusin', requestPagePreview);
+      visual.addEventListener('focusout', stopPagePreview);
     }
 
     const links = project.querySelector('.project__links');
@@ -53,17 +77,15 @@
       ['data-live-url', 'Live preview'],
     ].forEach(([field, label]) => {
       const url = project.dataset[field.replace('data-', '').replace(/-([a-z])/g, (_, char) => char.toUpperCase())]?.trim();
-      const item = url ? document.createElement('a') : document.createElement('span');
-      if (url) {
-        item.href = url;
-        item.target = '_blank';
-        item.rel = 'noreferrer';
-      } else {
-        item.textContent = `${label} URL · add when available`;
-      }
-      if (url) item.innerHTML = `${label} <span aria-hidden="true">↗</span>`;
+      if (!url) return;
+      const item = document.createElement('a');
+      item.href = url;
+      item.target = '_blank';
+      item.rel = 'noreferrer';
+      item.innerHTML = `${label} <span aria-hidden="true">↗</span>`;
       links.append(item);
     });
+    if (!links.children.length) links.remove();
   });
 
   function startTypewriter() {
@@ -320,31 +342,24 @@
     });
   }
 
-  // Open a prefilled Gmail compose draft; the visitor reviews and sends it.
-  const form = document.querySelector('.contact-form');
-  const toast = document.querySelector('.form-toast');
-  form?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const recipient = 'akhilpatyal49@gmail.com';
-    const values = new FormData(form);
-    const subject = String(values.get('subject') || '').trim();
-    const body = `Name: ${String(values.get('name') || '').trim()}\nEmail: ${String(values.get('email') || '').trim()}\n\n${String(values.get('message') || '').trim()}`;
-    const params = new URLSearchParams({ view: 'cm', fs: '1', to: recipient, su: subject, body });
-    const gmailUrl = `https://mail.google.com/mail/?${params.toString()}`;
-    const composeWindow = window.open(gmailUrl, '_blank');
+  // Give the contact profile tiles a restrained pointer-follow tilt.
+  const profileCards = document.querySelectorAll('[data-profile-card]');
+  if (window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)').matches) {
+    profileCards.forEach((card) => {
+      card.addEventListener('pointermove', (event) => {
+        const bounds = card.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width;
+      const y = (event.clientY - bounds.top) / bounds.height;
+        card.style.setProperty('--card-rotate-y', `${(x - .5) * 10}deg`);
+        card.style.setProperty('--card-rotate-x', `${(.5 - y) * 8}deg`);
+      });
+      card.addEventListener('pointerleave', () => {
+        card.style.setProperty('--card-rotate-x', '0deg');
+        card.style.setProperty('--card-rotate-y', '0deg');
+      });
+    });
+  }
 
-    if (composeWindow) {
-      composeWindow.opener = null;
-      if (toast) {
-        toast.textContent = 'Gmail draft opened in a new tab. Review and send it there.';
-        toast.classList.add('is-visible');
-        window.setTimeout(() => toast.classList.remove('is-visible'), 5000);
-      }
-      return;
-    }
-
-    window.location.assign(gmailUrl);
-  });
   window.addEventListener('load', () => {
     if (window.ScrollTrigger) ScrollTrigger.refresh();
     // Failsafe for CDN delays or script errors; never trap the visitor behind the loader.
